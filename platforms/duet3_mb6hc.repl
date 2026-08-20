@@ -51,9 +51,13 @@ usart2: UART.SAM_USART @ sysbus 0x4002c000
 gem: Network.CadenceGEM @ sysbus 0x40050000
     IRQ -> nvic@39
 
+// KSZ8081RNA, which is what the 6HC has. The identity is not cosmetic: ethernet_phy_find_valid
+// (Hardware/SAME70/Ethernet/ksz8081rna/ethernet_phy.c) reads PHYID1 and demands GMII_OUI_MSB =
+// 0x0022. Renode's stock 0x0007 makes ethernet_phy_init return GMAC_INVALID, and the object model
+// then reports network state "initFailed".
 phy: Network.EthernetPhysicalLayer @ gem 0
-    Id1: 0x0007
-    Id2: 0xC0F1
+    Id1: 0x0022
+    Id2: 0x1572
     AutoNegotiationAdvertisement: 0x00A1
     AutoNegotiationLinkPartnerBasePageAbility: 0x0001
 
