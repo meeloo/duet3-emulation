@@ -1,0 +1,24 @@
+:name: Probe how far config.g processing gets
+:description: Hooks the functions on the path from "is there a filesystem" to "the aux port is open".
+
+include $tcmodel
+include $piomodel
+
+mach create "duet3_mb6hc"
+machine LoadPlatformDescription $plat
+
+sysbus LoadBinary $fw 0x400000
+sysbus LoadSymbolsFrom $elf
+cpu VectorTableOffset 0x400000
+cpu PC `sysbus ReadDoubleWord 0x400004`
+cpu SP `sysbus ReadDoubleWord 0x400000`
+
+cpu AddHook 0x00446c90 "print 'HOOK MassStorage::FileExists'"
+cpu AddHook 0x00446d38 "print 'HOOK EmbeddedFiles::FindFirst'"
+cpu AddHook 0x00429174 "print 'HOOK GCodes::RunConfigFile'"
+cpu AddHook 0x0041895c "print 'HOOK Platform::HandleM575'"
+cpu AddHook 0x0041f7e0 "print 'HOOK AuxDevice::SetMode'"
+
+logLevel 3
+emulation RunFor "2.0"
+quit

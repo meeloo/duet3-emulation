@@ -8,35 +8,35 @@ the Mini 5+ (SAME54), MB6XD and Duet 2 (SAM4E) later.
 
 ## Status
 
-RepRapFirmware 3.7.0-beta.3 boots and **reaches its main loop**. No CPU faults. The watchdog is fed
-about 870 times a second, the ADC task is converting, and the firmware is trying to talk to the SD
-card — that is RRF running its normal FreeRTOS workload, not a stuck init.
+**The emulator can command and measure motion.** RepRapFirmware 3.7.0-beta.3 boots from a
+`USE_EMBEDDED_FILES` image, runs `config.g`, opens a G-code console, executes moves, and the resulting
+step pulses are counted on PIOC.
 
-The step clock runs: `tc0 StepClock` reads 0x30321 (197,409 ticks) after 0.3 emulated seconds. It is
-below the 225,000 a full 0.3s at 750kHz would give because the counter only starts when RRF enables
-it, roughly 37ms into boot. Being above 0xFFFF is the useful part: it proves the channel 0 to
-channel 2 chaining works.
+```
+$ tools/run_gcode.py --after 2.0 "G91" "G1 X10 F600" "M114"
+>>> M114
+    X:10.000 Y:0.000 Z:0.000 E:0.000 Count 800 0 0 Machine 10.000 0.000 0.000
+--- step edges: 1600
+```
 
-PIO is modelled, so STEP/DIR can now be watched: `pioc` traces the six MB6HC step pins and counts
-edges. Booting idle produces zero edges, which is correct — nothing has been commanded. That zero is
-trustworthy rather than merely absent: `scripts/selftest_pio.resc` pokes SODR/CODR/ODSR directly and
-checks the state and edge count, so an inert model would be caught.
+800 counts is 10mm at the `M92 X80` in `files/sys/config.g`, and 1600 edges is 800 steps with a rising
+and a falling edge each. The numbers agree, which is the point: this is a measurement, not a vibe.
 
-**Still not possible: commanding motion.** There is no console, so no way to send G-code in.
+`M700` velocity jogging works too:
 
-The chain behind that turned out to be longer than it looked. RepRapFirmware's aux G-code channels are
-`Aux` on UART2 and `Aux2` on USART2 (`Serial0Params`/`Serial1Params` in `Pins_Duet3_MB6HC.h`).
-Renode already models USART2, and `Aux2` needs no checksum
-(`commsParams[FirstAuxChannel + 1] = 0`), so it looks like a free console — except `AuxDevice::Init`
-only records the baud rate. Nothing calls `SetMode`, and therefore nothing calls `uart->begin()`,
-until `M575` runs. `M575` comes from `config.g`, which comes from the SD card. No SD, no console; and
-no console, no way to send the `M575` that would open one.
+```
+$ tools/run_gcode.py --after 2.0 "M700" "M700 X10" "M114"
+>>> M700
+    Jogging inactive, chunk 50ms, timeout 250ms, queue 3
+>>> M700 X10
+>>> M114
+    X:3.000 ... Count 240
+```
 
-The way out is `USE_EMBEDDED_FILES`, which `Pins_Duet3_MB6HC.h` already supports: it compiles the
-filesystem into the image after `_firmware_end` and turns off mass storage entirely. That removes
-HSMCI from the critical path. `Makefiles/Duet3_MB6HC_embedded.mk` builds it (that config did not
-previously exist, and `USE_EMBEDDED_FILES` did not compile on beta.3 — see the RepRapFirmware
-commit).
+X ran at the commanded 10mm/s and then stopped on its own, because only one `M700` was sent and the
+250ms watchdog fired. 3mm is consistent with the watchdog period plus the 150ms of chunks already
+queued ahead of it — which is the deceleration-on-loss-of-input behaviour the jog design claims,
+observed rather than asserted.
 
 Getting here needed these, each found by letting the firmware fail and reading the log:
 
@@ -69,7 +69,16 @@ Measured over 0.3 emulated seconds, now that it reaches the main loop:
 
 ## Next
 
-1. **Build the embedded filesystem image.** The format is in `src/Storage/EmbeddedFiles.cpp`: at
+1. Drive a realistic `M700` stream (repeated commands at 20-50Hz) and reconstruct the velocity profile
+   from the timestamped edge log, to check the claims the jog commit makes: junction blending, the
+   `v <= 2.a.P` ceiling, and per-axis limit clamping.
+2. AFEC is polled ~15000 times per 0.3s against an SVD stub, which is wasteful and means temperature
+   and voltage readings are meaningless. Worth a model eventually.
+3. HSMCI, if a real SD card is ever wanted rather than embedded files.
+
+### Done
+
+1. ~~**Build the embedded filesystem image.**~~ The format is in `src/Storage/EmbeddedFiles.cpp`: at
    `_firmware_end`, a header of `magic = 0x543C2BEF`, `directoriesOffset`, `numFiles`, then
    `numFiles` × (`nameOffset`, `contentOffset`, `contentLength`), all offsets relative to
    `_firmware_end`. Needs a builder script and a `config.g` whose job is to run
@@ -90,6 +99,26 @@ Measured over 0.3 emulated seconds, now that it reaches the main loop:
 
 Renode is not installed system-wide; the portable macOS build is unpacked in the session scratchpad.
 To install it properly: `brew install --cask renode`.
+
+Normal use is through the driver, which boots the machine, sends G-code and decodes the replies:
+
+```sh
+cd RepRapFirmware
+make Duet3_MB6HC_embedded CROSS_COMPILE=/Applications/ArmGNUToolchain/15.3.rel1/arm-none-eabi/bin/arm-none-eabi- -j8
+cp Duet3_MB6HC_embedded/Duet3Firmware_MB6HC_embedded.bin /tmp/fw.bin
+python3 Scripts/BuildEmbeddedFiles.py /tmp/fw.bin ../duet3-emulation/files   # filesystem first...
+python3 Scripts/CrcAppender.py /tmp/fw.bin                                   # ...then the CRC
+
+cd ../duet3-emulation
+DUET_FW=/tmp/fw.bin DUET_ELF=../RepRapFirmware/Duet3_MB6HC_embedded/Duet3Firmware_MB6HC_embedded.elf \
+  tools/run_gcode.py "M115"
+```
+
+G-code goes in by writing characters straight into the emulated USART2 and replies come back off the
+transmit holding register. Renode does have a socket terminal, but the direct route is deterministic,
+needs no ports, and keeps the emulation paused between steps so runs are reproducible.
+
+The lower-level scripts below are for bring-up rather than daily use.
 
 `.repl` and `.resc` paths inside Renode resolve relative to the Renode directory, hence the `cd`:
 
