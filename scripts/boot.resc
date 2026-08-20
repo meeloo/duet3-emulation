@@ -1,0 +1,19 @@
+:name: Duet 3 MB6HC boot probe
+:description: Loads the CRC-appended .bin (which is what a real board runs) and traces where it gets to.
+
+mach create "duet3_mb6hc"
+machine LoadPlatformDescription $plat
+
+# The .bin is the artefact the CRC covers; the .elf only supplies symbols.
+sysbus LoadBinary $fw 0x400000
+sysbus LoadSymbolsFrom $elf
+cpu VectorTableOffset 0x400000
+cpu PC `sysbus ReadDoubleWord 0x400004`
+cpu SP `sysbus ReadDoubleWord 0x400000`
+
+logLevel 2
+logFile $logfile true
+#cpu LogFunctionNames true
+
+emulation RunFor "0.3"
+quit

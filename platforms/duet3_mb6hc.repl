@@ -1,0 +1,79 @@
+// Duet 3 Mainboard 6HC - ATSAME70Q20B
+//
+// Self-contained on purpose: Renode's stock platforms/cpus/sam_e70.repl declares 256MB catch-all
+// memories at 0x0 and 0x20000000, which boots but silently absorbs every stray access - exactly the
+// class of bug an emulator exists to catch. This uses the real Q20B map instead.
+//
+// Only what RepRapFirmware has been observed to need is modelled. Everything else is left to the SVD
+// fallback, which returns reset values and logs the access; that log is the to-do list.
+
+cpu: CPU.CortexM @ sysbus
+    cpuType: "cortex-m7"
+    nvic: nvic
+    // The SAME70's Cortex-M7 has 16 MPU regions. Renode defaults to 8, and that is not a detail:
+    // RepRapFirmware configures region 8 during init and the CPU aborts on a non-existent region.
+    numberOfMPURegions: 16
+
+nvic: IRQControllers.NVIC @ sysbus 0xE000E000
+    priorityMask: 0xE0
+    systickFrequency: 300000000
+    IRQ -> cpu@0
+
+// 1MB internal flash. The firmware image is linked here and the reset vector points into it.
+flash: Memory.MappedMemory @ sysbus 0x00400000
+    size: 0x100000
+
+// 384KB main SRAM. RepRapFirmware's initial stack pointer is 0x20460000, i.e. the top of this.
+sram: Memory.MappedMemory @ sysbus 0x20400000
+    size: 0x60000
+
+// Tightly coupled memories. Disabled by default on real silicon, but map them so that a stray
+// access shows up as data rather than as a bus fault we would have to chase.
+itcm: Memory.MappedMemory @ sysbus 0x00000000
+    size: 0x20000
+
+dtcm: Memory.MappedMemory @ sysbus 0x20000000
+    size: 0x20000
+
+// SAM-BA boot ROM.
+rom: Memory.MappedMemory @ sysbus 0x00800000
+    size: 0x20000
+
+usart0: UART.SAM_USART @ sysbus 0x40024000
+    IRQ -> nvic@13
+
+usart1: UART.SAM_USART @ sysbus 0x40028000
+    IRQ -> nvic@14
+
+usart2: UART.SAM_USART @ sysbus 0x4002c000
+    IRQ -> nvic@15
+
+gem: Network.CadenceGEM @ sysbus 0x40050000
+    IRQ -> nvic@39
+
+phy: Network.EthernetPhysicalLayer @ gem 0
+    Id1: 0x0007
+    Id2: 0xC0F1
+    AutoNegotiationAdvertisement: 0x00A1
+    AutoNegotiationLinkPartnerBasePageAbility: 0x0001
+
+trng: Miscellaneous.SAM_TRNG @ sysbus 0x40070000
+
+// PMC status register. Clock setup busy-waits on bits here (MOSCXTS, LOCKA, MCKRDY); alternating
+// all-ones and all-zeros satisfies both wait-for-set and wait-for-clear loops. A real PMC model
+// replaces this once clock rates start to matter.
+PMC_SR: Python.PythonPeripheral @ sysbus 0x400E0668
+    size: 0x4
+    initable: true
+    script: '''
+if request.IsInit:
+    lastVal = 0
+else:
+    lastVal = 1 - lastVal
+    request.Value = lastVal * 0xFFFFFFFF
+'''
+
+sysbus:
+    init:
+        Tag <0x400E0940 0x4> "CIDR" 0xa1020e00
+        ApplySVD @https://dl.antmicro.com/projects/renode/svd/ATSAME70Q21.svd
