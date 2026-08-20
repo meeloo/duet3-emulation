@@ -58,6 +58,7 @@ namespace Antmicro.Renode.Peripherals.Analog
                 {
                     var channel = selected & (NumChannels - 1);
                     endOfConversion &= ~(1u << (int)channel);   // reading the data clears that channel's EOC
+                    reads++;
                     return values[channel];
                 }
                 case RegisterLcdr:
@@ -75,13 +76,16 @@ namespace Antmicro.Renode.Peripherals.Analog
                     if((value & CrStart) != 0)
                     {
                         endOfConversion = enabled;  // a conversion of every enabled channel, instantly
+                        starts++;
                     }
                     break;
                 case RegisterMr:
                     mode = value;
+                    this.Log(LogLevel.Info, "MR 0x{0:X}", value);
                     break;
                 case RegisterCher:
                     enabled |= value & ChannelMask;
+                    this.Log(LogLevel.Info, "CHER 0x{0:X} -> enabled 0x{1:X}", value, enabled);
                     break;
                 case RegisterChdr:
                     enabled &= ~value;
@@ -158,6 +162,11 @@ namespace Antmicro.Renode.Peripherals.Analog
         private uint endOfConversion;
         private uint selected;
         private uint mode;
+        private ulong starts;
+        private ulong reads;
+
+        public ulong Starts => starts;
+        public ulong Reads => reads;
 
         private const int NumChannels = 16;
         private const uint ChannelMask = 0xFFF;      // 12 external channels take part in CHSR/ISR

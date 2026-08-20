@@ -89,6 +89,28 @@ Measured over 0.3 emulated seconds, now that it reaches the main loop:
 | USBHS | 12 | only `SR` is faked — **needed for a console** |
 | EFC, MATRIX, RSTC | 20 | reset values plus the `FSR` fake |
 
+## Pretending hardware is attached
+
+`files/sys/config.g` is now an ordinary Cartesian printer - two heaters, two thermistors, two fans, a
+tool, four drives - so DWC and AxisControl have something realistic to show. The readings behind it
+come from AFEC channel values in the platform file:
+
+```
+M105  ->  T:25.0 /0.0 T0:25.0 /0.0 B:25.0 /0.0
+boards[0].vIn     -> {"current":24.0,"max":24.0,"min":24.0}
+network.interfaces[0].state -> "active"
+```
+
+Two things about the ADC scaling that cost an hour and are not guessable:
+
+* `Thermistor::TryGetTemperature` needs **VREF and VSSA** (AFEC1 ch9 and ch1) as well as the thermistor
+  channel, because it computes `R = seriesR * (temp - vssa) / (vref - temp)`. Without them every
+  sensor reports `badVref` and reads 2000.0, whatever the thermistor channel says.
+* The thermistor path compares against `OversampledAdcRange` = 1<<16 and the readings reach it
+  unscaled, so those channels want **16-bit** values - VREF 65535, and 64124 for 100k at 25C. The VIN
+  path divides by `1<<AdcBits` with `AdcBits` = 14, so *that* channel wants 14-bit - 8602 for 24V. The
+  two are calibrated against what the firmware reports, not derived.
+
 ## Next
 
 1. Drive a realistic `M700` stream (repeated commands at 20-50Hz) and reconstruct the velocity profile

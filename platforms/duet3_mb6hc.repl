@@ -79,8 +79,11 @@ afec0: Analog.SAME70_AnalogFrontEnd @ sysbus 0x4003C000
     Channels: "4:4301,9:8602,11:8000"
 
 afec1: Analog.SAME70_AnalogFrontEnd @ sysbus 0x40064000
-    // ch2, 4, 5, 6 = thermistors 0-3, all sitting at room temperature
-    Channels: "2:5500,4:5500,5:5500,6:5500"
+    // ch1 = VSSA sense (0V), ch9 = VREF sense (full scale). Thermistor::TryGetTemperature computes
+    // R = seriesR * (temp - vssa) / (vref - temp), so those two are not optional - without them the
+    // thermistor readings are meaningless regardless of what the thermistor channels say.
+    // ch2, 4, 5, 6 = thermistors 0-3 at 16031, which is 100k against the 2200R series resistor, i.e. 25C.
+    Channels: "1:0,9:65535,2:64124,4:64124,5:64124,6:64124"
 
 // Step clock. Channel 0 is the low 16 bits and channel 2 the high 16, chained; see the model.
 // Only channel 0's interrupt is wired because that is the only one RepRapFirmware enables (ID_TC0 = 23).

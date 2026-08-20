@@ -42,6 +42,9 @@ def build_script(args, firmware, elf):
     if args.trace_steps:
         # The PIO model logs traced edges at Info with the emulated timestamp; everything else stays quiet.
         lines.append('logLevel 1 pioc')
+    if args.trace_afec:
+        lines.append('logLevel 1 afec0')
+        lines.append('logLevel 1 afec1')
     lines += [
         f'emulation RunFor "{args.settle}"',
     ]
@@ -52,6 +55,7 @@ def build_script(args, firmware, elf):
             lines.append(f'usart2 WriteChar {ord(ch):#x}')
         lines.append(f'emulation RunFor "{args.after}"')
     lines += [
+        'echo "AFEC1 STARTS"', 'afec1 Starts', 'echo "AFEC1 READS"', 'afec1 Reads',
         'echo "STEP EDGES"',
         'pioc EdgeCount',
         'echo "STEP CLOCK"',
@@ -71,6 +75,7 @@ def main():
                         help='CRC-appended USE_EMBEDDED_FILES .bin')
     parser.add_argument('--elf', default=os.environ.get('DUET_ELF'))
     parser.add_argument('--raw', action='store_true', help='also print the raw Renode output')
+    parser.add_argument('--trace-afec', action='store_true', help='log AFEC channel enables')
     parser.add_argument('--trace-steps', action='store_true', help='log every step-pin edge with its emulated timestamp')
     parser.add_argument('--edge-log', help='write parsed edges to this file as "microseconds pin level"')
     args = parser.parse_args()
@@ -111,7 +116,7 @@ def main():
             print(f">>> {sent.group(1)}")
         elif tx:
             pending.append(int(tx.group(1)) & 0xFF)
-        elif line.strip() in ('STEP EDGES', 'STEP CLOCK'):
+        elif line.strip() in ('STEP EDGES', 'STEP CLOCK', 'AFEC1 STARTS', 'AFEC1 READS'):
             flush(pending)
             label = line.strip().lower()
         elif re.match(r'^0x[0-9a-fA-F]+$', line.strip()) and label:
