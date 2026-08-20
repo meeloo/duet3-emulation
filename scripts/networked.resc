@@ -1,0 +1,39 @@
+:name: Duet 3 MB6HC on a real network
+:description: Boots the board with its MAC bridged to a Linux TAP device, so the host can reach its HTTP server.
+#
+# This one only works inside the Lima guest. Renode needs a layer-2 TAP interface and macOS has none
+# (utun is layer 3, and the third-party kexts do not load on Apple Silicon), which is why the VM exists.
+
+include $tcmodel
+include $piomodel
+include $afecmodel
+
+mach create "duet3_mb6hc"
+machine LoadPlatformDescription $plat
+
+sysbus LoadBinary $fw 0x400000
+sysbus LoadSymbolsFrom $elf
+cpu VectorTableOffset 0x400000
+cpu PC `sysbus ReadDoubleWord 0x400004`
+cpu SP `sysbus ReadDoubleWord 0x400000`
+
+# The TAP is not something the MAC attaches to directly. connector Connect takes
+# (IEmulationElement, IConnectable), and the switch is the IConnectable hub - so the MAC and the host
+# TAP each connect to the switch, and the switch bridges them.
+emulation CreateSwitch "switch"
+connector Connect gem switch
+# The TAP registers under the "host." namespace, not under the bare name given to CreateTap - so
+# "connector Connect tap switch" fails with a signature mismatch that looks like a type problem but
+# is really a name-resolution one. Renode's own scripts/single-node/nucleo_h753zi_hubris.resc shows
+# the working form.
+# Not persistent: setup_guest.sh already created tap0 and gave it 192.168.100.1/24, and asking Renode
+# to create a persistent one replaces the interface and discards that address.
+emulation CreateTap "tap0" "tap"
+connector Connect host.tap switch
+
+# Aux2 on USART2 stays available as a console, so G-code can still be driven while the network is up.
+emulation CreateServerSocketTerminal 3456 "aux2" false
+connector Connect sysbus.usart2 aux2
+
+logLevel 2
+start

@@ -160,4 +160,7 @@ else:
 sysbus:
     init:
         Tag <0x400E0940 0x4> "CIDR" 0xa1020e00
-        ApplySVD @https://dl.antmicro.com/projects/renode/svd/ATSAME70Q21.svd
+        # Local copy rather than the URL: Renode re-downloads it on every fresh start, which is slow
+        # and made the emulator die mid-download in the Lima guest. The home directory is mounted at
+        # the same path in the guest, so one absolute path works on both sides.
+        ApplySVD @/Users/smetrot/work/duet3/duet3-emulation/platforms/ATSAME70Q21.svd

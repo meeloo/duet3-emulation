@@ -12,7 +12,7 @@ M111 S0
 M575 P3 S2 B57600
 
 M550 P"DuetEmulator"
-M552 P192.168.1.50 S1
+M552 P192.168.100.50 S1
 M586 P0 S1 C"*"                          ; HTTP on, CORS open so DWC can be served from elsewhere
 
 ; --- Drives -------------------------------------------------------------------------------------

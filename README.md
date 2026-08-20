@@ -8,86 +8,64 @@ the Mini 5+ (SAME54), MB6XD and Duet 2 (SAM4E) later.
 
 ## Status
 
-**The emulator can command and measure motion.** RepRapFirmware 3.7.0-beta.3 boots from a
-`USE_EMBEDDED_FILES` image, runs `config.g`, opens a G-code console, executes moves, and the resulting
-step pulses are counted on PIOC.
+**DWC and AxisControl can talk to it.** RepRapFirmware runs on the emulated board with a real network
+interface, reachable from macOS:
 
 ```
-$ tools/run_gcode.py --after 2.0 "G91" "G1 X10 F600" "M114"
->>> M114
-    X:10.000 Y:0.000 Z:0.000 E:0.000 Count 800 0 0 Machine 10.000 0.000 0.000
---- step edges: 1600
+$ curl -s http://localhost:8080/rr_connect?password=
+{"err":0,"sessionTimeout":8000,"boardType":"duet3mb6hc101","apiLevel":2,"sessionKey":0}
+
+$ curl -s "http://localhost:8080/rr_model?key=state"
+{"result":{"status":"idle","machineMode":"FFF","currentTool":0,...}}
 ```
 
-800 counts is 10mm at the `M92 X80` in `files/sys/config.g`, and 1600 edges is 800 steps with a rising
-and a falling edge each. The numbers agree, which is the point: this is a measurement, not a vibe.
+`Access-Control-Allow-Origin: *` is set (from `M586 P0 C"*"`), so DWC can be served from anywhere and
+pointed at `http://localhost:8080` - no SD card and no `/www` on the board.
 
-`M700` velocity jogging works too:
+Motion, sensors and the G-code console all work too; see below.
 
-```
-$ tools/run_gcode.py --after 2.0 "M700" "M700 X10" "M114"
->>> M700
-    Jogging inactive, chunk 50ms, timeout 250ms, queue 3
->>> M700 X10
->>> M114
-    X:3.000 ... Count 240
-```
+### Why there is a Linux VM
 
-X ran at the commanded 10mm/s and then stopped on its own, because only one `M700` was sent and the
-250ms watchdog fired — the deceleration-on-loss-of-input behaviour the jog design claims, observed
-rather than asserted.
-
-### It has already caught a real bug
-
-Driving a realistic 20Hz stream and reconstructing the velocity profile from timestamped step edges
-found that `M700` stuttered badly at its original default queue depth of 3:
+Renode needs a layer-2 TAP interface to put the board on a network. macOS has none - `utun` is layer 3,
+and the third-party TAP kexts do not load on Apple Silicon (`No TUNTAP kernel extension found, running
+in dummy mode`). Renode's own emulated network services are UDP-only (`CreateNetworkServer` offers just
+`StartTFTP`), so bridging in-process would mean writing a TCP stack. A Linux guest has `/dev/net/tun`
+built in, so the emulator runs there:
 
 ```
-$ tools/analyse_edges.py jog_d3.txt        $ tools/analyse_edges.py jog_d4.txt
-711 steps = 8.888mm                        767 steps = 9.588mm
-   t (ms)   mean mm/s      min                 t (ms)   mean mm/s      min
-       50       10.00     9.98                     50       10.00     9.98
-      150        9.34     2.50   <--               150       10.00     9.98
-      250        9.11     2.50   <--               250       10.00     9.99
+board 192.168.100.50 --emulated GMAC--> switch --> tap0 192.168.100.1  (Lima guest)
+guest :8080 --socat--> 192.168.100.50:80 --Lima--> macOS localhost:8080
 ```
 
-Velocity collapsed to 2.5mm/s at chunk boundaries and 7% of the commanded distance was lost. It looks
-like a blending failure and is not: it is starvation. `JogController::Spin` adds at most one chunk per
-pass, so when the ring runs down to a single move, lookahead correctly plans that move to stop at its
-end. The default is now 5 (RepRapFirmware commit `924ac78`), and the documented latency went from a
-wrong 150-200ms to a measured 300ms.
+Lima mounts the home directory at the same path in the guest, so one set of paths works on both sides
+and the firmware is still built on macOS.
 
-This is the kind of thing that on real hardware shows up as "jogging feels notchy" and gets argued
-about. Here it is a table of numbers.
+### Running it
 
-Getting here needed these, each found by letting the firmware fail and reading the log:
+```sh
+brew install lima
+limactl start --name=duet --tty=false --cpus=4 --memory=6 template://default
+limactl shell duet -- bash ~/work/duet3/duet3-emulation/tools/setup_guest.sh   # once
+
+tools/build_firmware.sh      # compile, embed config.g, append CRC
+tools/run_networked.sh       # boot it in the guest
+curl -s http://localhost:8080/rr_connect?password=
+```
+
+For motion work without the network, `tools/run_gcode.py` still drives the board over the emulated
+USART2 on macOS directly, which is faster and deterministic.
+
+### Five things that had to be got right
+
+Each of these failed silently or misleadingly, so they are worth knowing:
 
 | Symptom | Cause |
 |---|---|
-| 3-blink loop in `AppMain` | The `.bin` had no firmware CRC. `Makefiles/*.mk` append one only `if command -v CrcAppender`, and it was not installed. See `RepRapFirmware/Scripts/CrcAppender.py`. |
-| `CPU abort: MPU: Trying to use non-existent MPU region ... faulting region number: 8` | Renode's `CPU.CortexM` defaults to 8 MPU regions; the SAME70's Cortex-M7 has 16 and RepRapFirmware configures region 8. |
-| Boot appeared to work but hid stray accesses | Stock `sam_e70.repl` declares 256MB catch-all memories at 0x0 and 0x20000000. Replaced with the real Q20B map. |
-| Spin in `StepTimer::Init` on `TC0:CV0` | No timer model. See `peripherals/SAME70_TimerCounter.cs`. |
-| Spin in `dcd_connect` on `USBHS:SR` | TinyUSB waits for UTMI `CLKUSABLE`. Stubbed. |
-| Spin in `efc_perform_read_sequence` on `EFC:FSR` | Reading the unique ID waits for `FRDY` to clear and then to set; a constant hangs one of the two. |
-| Spin in `CanDevice::Enable` on `MCAN0/1:CCCR` | `CCCR.INIT` is cleared then polled until it reads back clear, so the register needs real storage. |
-| Nothing to observe motion with | No PIO model. See `peripherals/SAME70_ParallelIO.cs`. |
-
-## Peripherals the firmware touches
-
-Measured over 0.3 emulated seconds, now that it reaches the main loop:
-
-| Peripheral | Accesses | State |
-|---|---|---|
-| AFEC0 / AFEC1 | 15103 | SVD stub — ADC conversions, polled hard |
-| HSMCI | 2296 | SVD stub — the SD card |
-| WDT / RSWDT | 520 | SVD stub; harmless |
-| PIOA–E | — | **modelled**; `pioc` traces the step pins |
-| PMC | 94 | status register faked |
-| XDMAC | 32 | SVD stub |
-| MCAN0 / MCAN1 | 44 | only `CCCR` has storage |
-| USBHS | 12 | only `SR` is faked — **needed for a console** |
-| EFC, MATRIX, RSTC | 20 | reset values plus the `FSR` fake |
+| Script does nothing, machine never runs | `emulation LogEthernetTraffic` launches Wireshark; absent, it errors and aborts the rest of the script |
+| `No such command or device: Note` | `.resc` comments are `#`, not `;` |
+| Renode dies mid-boot | Started via `limactl shell`, it belongs to the SSH session's process group - needs `setsid` |
+| Renode boots, runs, then vanishes | `--console` exits on stdin EOF, so `</dev/null` kills it; feed it `tail -f /dev/null` |
+| `connector Connect ... "Parameters did not match the signature"` | The TAP registers as `host.tap`, and connects to a *switch* - the MAC does not attach to it directly |
 
 ## Pretending hardware is attached
 

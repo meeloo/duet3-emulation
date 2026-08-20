@@ -1,0 +1,28 @@
+:name: Ethernet traffic probe
+:description: Does the emulated MAC actually transmit? Logs the GEM at Noisy while the board brings its interface up.
+#
+# Note: do NOT use "emulation LogEthernetTraffic" here. It launches Wireshark rather than logging to a
+# file, and when Wireshark is absent it raises an error that aborts the rest of the script - which
+# silently means the machine never runs and you conclude "no frames" from a run that never happened.
+
+include $tcmodel
+include $piomodel
+include $afecmodel
+
+mach create "duet3_mb6hc"
+machine LoadPlatformDescription $plat
+
+sysbus LoadBinary $fw 0x400000
+sysbus LoadSymbolsFrom $elf
+cpu VectorTableOffset 0x400000
+cpu PC `sysbus ReadDoubleWord 0x400004`
+cpu SP `sysbus ReadDoubleWord 0x400000`
+
+emulation CreateSwitch "switch"
+connector Connect gem switch
+
+logLevel 3
+logLevel -1 gem
+
+emulation RunFor "3.5"
+quit
