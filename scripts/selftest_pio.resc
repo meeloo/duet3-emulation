@@ -1,0 +1,24 @@
+:name: PIO model self-test
+:description: Pokes PIOC directly so that a zero step count elsewhere can be read as "idle" rather than "model inert".
+
+include $tcmodel
+include $piomodel
+
+mach create "piotest"
+machine LoadPlatformDescription $plat
+
+echo "--- initial OutputState (expect 0x0):"
+pioc OutputState
+echo "--- after SODR of the six MB6HC step pins (expect 0x10050212):"
+sysbus WriteDoubleWord 0x400E1230 0x10050212
+pioc OutputState
+echo "--- traced edges (expect 6):"
+pioc EdgeCount
+echo "--- after CODR of two of them (expect 0x10050010):"
+sysbus WriteDoubleWord 0x400E1234 0x00000202
+pioc OutputState
+echo "--- traced edges (expect 8):"
+pioc EdgeCount
+echo "--- ODSR readback (expect 0x10050010):"
+sysbus ReadDoubleWord 0x400E1238
+quit

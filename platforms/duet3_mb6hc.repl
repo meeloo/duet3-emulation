@@ -57,6 +57,16 @@ phy: Network.EthernetPhysicalLayer @ gem 0
     AutoNegotiationAdvertisement: 0x00A1
     AutoNegotiationLinkPartnerBasePageAbility: 0x0001
 
+// Parallel IO. All six STEP pins live on PIOC, so that one traces by default; the trace mask is
+// pins 18, 16, 28, 1, 4, 9 (drivers 0-5) from Config/Pins_Duet3_MB6HC.h. DIR pins are spread over
+// PIOA, PIOB, PIOC and PIOD, so add those masks when direction matters too.
+pioa: GPIOPort.SAME70_ParallelIO @ sysbus 0x400E0E00
+piob: GPIOPort.SAME70_ParallelIO @ sysbus 0x400E1000
+pioc: GPIOPort.SAME70_ParallelIO @ sysbus 0x400E1200
+    TraceMask: 0x10050212
+piod: GPIOPort.SAME70_ParallelIO @ sysbus 0x400E1400
+pioe: GPIOPort.SAME70_ParallelIO @ sysbus 0x400E1600
+
 // Step clock. Channel 0 is the low 16 bits and channel 2 the high 16, chained; see the model.
 // Only channel 0's interrupt is wired because that is the only one RepRapFirmware enables (ID_TC0 = 23).
 tc0: Timers.SAME70_TimerCounter @ sysbus 0x4000C000

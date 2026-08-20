@@ -17,8 +17,13 @@ below the 225,000 a full 0.3s at 750kHz would give because the counter only star
 it, roughly 37ms into boot. Being above 0xFFFF is the useful part: it proves the channel 0 to
 channel 2 chaining works.
 
-**Not yet possible: observing motion.** There is no console to send G-code to, and the PIO model
-needed to watch STEP/DIR does not exist yet. Those are the next two pieces.
+PIO is modelled, so STEP/DIR can now be watched: `pioc` traces the six MB6HC step pins and counts
+edges. Booting idle produces zero edges, which is correct — nothing has been commanded. That zero is
+trustworthy rather than merely absent: `scripts/selftest_pio.resc` pokes SODR/CODR/ODSR directly and
+checks the state and edge count, so an inert model would be caught.
+
+**Still not possible: commanding motion.** There is no console, so no way to send G-code in. That is
+the last piece before this can answer a question about jogging.
 
 Getting here needed these, each found by letting the firmware fail and reading the log:
 
@@ -31,6 +36,7 @@ Getting here needed these, each found by letting the firmware fail and reading t
 | Spin in `dcd_connect` on `USBHS:SR` | TinyUSB waits for UTMI `CLKUSABLE`. Stubbed. |
 | Spin in `efc_perform_read_sequence` on `EFC:FSR` | Reading the unique ID waits for `FRDY` to clear and then to set; a constant hangs one of the two. |
 | Spin in `CanDevice::Enable` on `MCAN0/1:CCCR` | `CCCR.INIT` is cleared then polled until it reads back clear, so the register needs real storage. |
+| Nothing to observe motion with | No PIO model. See `peripherals/SAME70_ParallelIO.cs`. |
 
 ## Peripherals the firmware touches
 
@@ -41,7 +47,7 @@ Measured over 0.3 emulated seconds, now that it reaches the main loop:
 | AFEC0 / AFEC1 | 15103 | SVD stub — ADC conversions, polled hard |
 | HSMCI | 2296 | SVD stub — the SD card |
 | WDT / RSWDT | 520 | SVD stub; harmless |
-| PIOA–E | 545 | SVD stub — **needed to observe STEP/DIR** |
+| PIOA–E | — | **modelled**; `pioc` traces the step pins |
 | PMC | 94 | status register faked |
 | XDMAC | 32 | SVD stub |
 | MCAN0 / MCAN1 | 44 | only `CCCR` has storage |
@@ -50,9 +56,10 @@ Measured over 0.3 emulated seconds, now that it reaches the main loop:
 
 ## Next
 
-1. **PIO model** — without it there is nothing to watch. This is what turns the emulator into a motion oracle.
-2. **A console** — either USBHS properly, or the PanelDue UART, so G-code can be sent in.
-3. **HSMCI**, or an embedded-files build, so a real `config.g` is read.
+1. **A console** — either USBHS properly, or the PanelDue UART, so G-code can be sent in. Without it
+   the machine boots idle and there is nothing to measure.
+2. **HSMCI**, or an embedded-files build, so a real `config.g` is read and drivers are configured.
+3. Then: drive `M700` and reconstruct the velocity profile from the traced step edges.
 
 ## Layout
 

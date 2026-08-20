@@ -2,6 +2,7 @@
 :description: Loads the CRC-appended .bin (which is what a real board runs) and traces where it gets to.
 
 include $tcmodel
+include $piomodel
 
 mach create "duet3_mb6hc"
 machine LoadPlatformDescription $plat
@@ -23,4 +24,6 @@ emulation RunFor "0.3"
 # emulated time should land near 225000 ticks.
 echo "step clock after run:"
 tc0 StepClock
+echo "traced STEP edges on PIOC:"
+pioc EdgeCount
 quit
