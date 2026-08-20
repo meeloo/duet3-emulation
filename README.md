@@ -22,8 +22,21 @@ edges. Booting idle produces zero edges, which is correct — nothing has been c
 trustworthy rather than merely absent: `scripts/selftest_pio.resc` pokes SODR/CODR/ODSR directly and
 checks the state and edge count, so an inert model would be caught.
 
-**Still not possible: commanding motion.** There is no console, so no way to send G-code in. That is
-the last piece before this can answer a question about jogging.
+**Still not possible: commanding motion.** There is no console, so no way to send G-code in.
+
+The chain behind that turned out to be longer than it looked. RepRapFirmware's aux G-code channels are
+`Aux` on UART2 and `Aux2` on USART2 (`Serial0Params`/`Serial1Params` in `Pins_Duet3_MB6HC.h`).
+Renode already models USART2, and `Aux2` needs no checksum
+(`commsParams[FirstAuxChannel + 1] = 0`), so it looks like a free console — except `AuxDevice::Init`
+only records the baud rate. Nothing calls `SetMode`, and therefore nothing calls `uart->begin()`,
+until `M575` runs. `M575` comes from `config.g`, which comes from the SD card. No SD, no console; and
+no console, no way to send the `M575` that would open one.
+
+The way out is `USE_EMBEDDED_FILES`, which `Pins_Duet3_MB6HC.h` already supports: it compiles the
+filesystem into the image after `_firmware_end` and turns off mass storage entirely. That removes
+HSMCI from the critical path. `Makefiles/Duet3_MB6HC_embedded.mk` builds it (that config did not
+previously exist, and `USE_EMBEDDED_FILES` did not compile on beta.3 — see the RepRapFirmware
+commit).
 
 Getting here needed these, each found by letting the firmware fail and reading the log:
 
@@ -56,9 +69,15 @@ Measured over 0.3 emulated seconds, now that it reaches the main loop:
 
 ## Next
 
-1. **A console** — either USBHS properly, or the PanelDue UART, so G-code can be sent in. Without it
-   the machine boots idle and there is nothing to measure.
-2. **HSMCI**, or an embedded-files build, so a real `config.g` is read and drivers are configured.
+1. **Build the embedded filesystem image.** The format is in `src/Storage/EmbeddedFiles.cpp`: at
+   `_firmware_end`, a header of `magic = 0x543C2BEF`, `directoriesOffset`, `numFiles`, then
+   `numFiles` × (`nameOffset`, `contentOffset`, `contentLength`), all offsets relative to
+   `_firmware_end`. Needs a builder script and a `config.g` whose job is to run
+   `M575 P2 S0 B57600` — opening `Aux2` on USART2.
+   Note the ordering: append the filesystem *first*, then the CRC, because for embedded builds the
+   CRC lives after the files. `Scripts/CrcAppender.py` already asserts this rather than silently
+   CRCing the wrong extent.
+2. **Send G-code over `usart2`** and confirm RRF answers.
 3. Then: drive `M700` and reconstruct the velocity profile from the traced step edges.
 
 ## Layout
