@@ -37,6 +37,11 @@ def build_script(args, firmware, elf):
         'cpu SP `sysbus ReadDoubleWord 0x400000`',
         f'sysbus AddWatchpointHook {USART2_THR:#x} 4 Write "print \'TX %d\' % value"',
         'logLevel 3',
+    ]
+    if args.trace_steps:
+        # The PIO model logs traced edges at Info with the emulated timestamp; everything else stays quiet.
+        lines.append('logLevel 1 pioc')
+    lines += [
         f'emulation RunFor "{args.settle}"',
     ]
     for command in args.gcode:
@@ -64,6 +69,8 @@ def main():
                         help='CRC-appended USE_EMBEDDED_FILES .bin')
     parser.add_argument('--elf', default=os.environ.get('DUET_ELF'))
     parser.add_argument('--raw', action='store_true', help='also print the raw Renode output')
+    parser.add_argument('--trace-steps', action='store_true', help='log every step-pin edge with its emulated timestamp')
+    parser.add_argument('--edge-log', help='write parsed edges to this file as "microseconds pin level"')
     args = parser.parse_args()
 
     if not args.firmware or not args.elf:
@@ -83,6 +90,13 @@ def main():
 
     if args.raw:
         print(result.stdout)
+
+    if args.edge_log:
+        edges = re.findall(r'pioc:\s+([\d.]+) pin (\d+) -> (\d)', result.stdout)
+        with open(args.edge_log, 'w') as handle:
+            for micros, pin, level in edges:
+                handle.write(f"{micros} {pin} {level}\n")
+        print(f"--- wrote {len(edges)} edges to {args.edge_log}")
 
     # Interleave what we sent with what came back, decoding TX bytes into text.
     pending = bytearray()

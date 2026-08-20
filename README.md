@@ -34,9 +34,31 @@ $ tools/run_gcode.py --after 2.0 "M700" "M700 X10" "M114"
 ```
 
 X ran at the commanded 10mm/s and then stopped on its own, because only one `M700` was sent and the
-250ms watchdog fired. 3mm is consistent with the watchdog period plus the 150ms of chunks already
-queued ahead of it — which is the deceleration-on-loss-of-input behaviour the jog design claims,
-observed rather than asserted.
+250ms watchdog fired — the deceleration-on-loss-of-input behaviour the jog design claims, observed
+rather than asserted.
+
+### It has already caught a real bug
+
+Driving a realistic 20Hz stream and reconstructing the velocity profile from timestamped step edges
+found that `M700` stuttered badly at its original default queue depth of 3:
+
+```
+$ tools/analyse_edges.py jog_d3.txt        $ tools/analyse_edges.py jog_d4.txt
+711 steps = 8.888mm                        767 steps = 9.588mm
+   t (ms)   mean mm/s      min                 t (ms)   mean mm/s      min
+       50       10.00     9.98                     50       10.00     9.98
+      150        9.34     2.50   <--               150       10.00     9.98
+      250        9.11     2.50   <--               250       10.00     9.99
+```
+
+Velocity collapsed to 2.5mm/s at chunk boundaries and 7% of the commanded distance was lost. It looks
+like a blending failure and is not: it is starvation. `JogController::Spin` adds at most one chunk per
+pass, so when the ring runs down to a single move, lookahead correctly plans that move to stop at its
+end. The default is now 5 (RepRapFirmware commit `924ac78`), and the documented latency went from a
+wrong 150-200ms to a measured 300ms.
+
+This is the kind of thing that on real hardware shows up as "jogging feels notchy" and gets argued
+about. Here it is a table of numbers.
 
 Getting here needed these, each found by letting the firmware fail and reading the log:
 
