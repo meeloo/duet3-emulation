@@ -58,7 +58,7 @@ Measured over 0.3 emulated seconds, now that it reaches the main loop:
 
     platforms/   .repl platform descriptions
     scripts/     .resc run scripts
-    peripherals/ C# peripheral models (empty until the TC model lands)
+    peripherals/ C# peripheral models
 
 ## Running
 
@@ -78,6 +78,7 @@ python3 /Users/smetrot/work/duet3/RepRapFirmware/Scripts/CrcAppender.py /tmp/fw_
 cd $RENODE && ./renode --disable-xwt --console \
   -e "\$fw=@/tmp/fw_crc.bin" \
   -e "\$elf=@$FW/Duet3Firmware_MB6HC.elf" \
+  -e "\$tcmodel=@$EMU/peripherals/SAME70_TimerCounter.cs" \
   -e "\$plat=@$EMU/platforms/duet3_mb6hc.repl" \
   -e "\$logfile=@/tmp/boot.log" \
   -e "include @$EMU/scripts/boot.resc"
