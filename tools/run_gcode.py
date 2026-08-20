@@ -28,6 +28,7 @@ def build_script(args, firmware, elf):
     lines = [
         f'include @{EMU}/peripherals/SAME70_TimerCounter.cs',
         f'include @{EMU}/peripherals/SAME70_ParallelIO.cs',
+        f'include @{EMU}/peripherals/SAME70_AnalogFrontEnd.cs',
         'mach create "duet3_mb6hc"',
         f'machine LoadPlatformDescription @{EMU}/platforms/duet3_mb6hc.repl',
         f'sysbus LoadBinary @{firmware} 0x400000',
@@ -45,7 +46,8 @@ def build_script(args, firmware, elf):
         f'emulation RunFor "{args.settle}"',
     ]
     for command in args.gcode:
-        lines.append(f'echo "SENT {command}"')
+        # The echo goes into a Renode script, so a quote in the G-code would end the string early.
+        lines.append('echo "SENT {0}"'.format(command.replace('"', "'")))
         for ch in command + "\n":
             lines.append(f'usart2 WriteChar {ord(ch):#x}')
         lines.append(f'emulation RunFor "{args.after}"')

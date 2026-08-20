@@ -67,6 +67,17 @@ pioc: GPIOPort.SAME70_ParallelIO @ sysbus 0x400E1200
 piod: GPIOPort.SAME70_ParallelIO @ sysbus 0x400E1400
 pioe: GPIOPort.SAME70_ParallelIO @ sysbus 0x400E1600
 
+// Analogue inputs. These values are how the board pretends hardware is attached: without them
+// RepRapFirmware sees no completed conversions at all, reports no temperatures, and has no supply
+// voltage to enable drivers for. Channel map is from Pins_Duet3_MB6HC.h; readings are 14-bit.
+afec0: Analog.SAME70_AnalogFrontEnd @ sysbus 0x4003C000
+    // ch4 = 12V rail at 12.0V, ch9 = VIN at 24.0V, ch11 = MCU temperature sensor
+    Channels: "4:4301,9:8602,11:8000"
+
+afec1: Analog.SAME70_AnalogFrontEnd @ sysbus 0x40064000
+    // ch2, 4, 5, 6 = thermistors 0-3, all sitting at room temperature
+    Channels: "2:5500,4:5500,5:5500,6:5500"
+
 // Step clock. Channel 0 is the low 16 bits and channel 2 the high 16, chained; see the model.
 // Only channel 0's interrupt is wired because that is the only one RepRapFirmware enables (ID_TC0 = 23).
 tc0: Timers.SAME70_TimerCounter @ sysbus 0x4000C000
