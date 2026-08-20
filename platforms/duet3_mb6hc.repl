@@ -57,6 +57,62 @@ phy: Network.EthernetPhysicalLayer @ gem 0
     AutoNegotiationAdvertisement: 0x00A1
     AutoNegotiationLinkPartnerBasePageAbility: 0x0001
 
+// Step clock. Channel 0 is the low 16 bits and channel 2 the high 16, chained; see the model.
+// Only channel 0's interrupt is wired because that is the only one RepRapFirmware enables (ID_TC0 = 23).
+tc0: Timers.SAME70_TimerCounter @ sysbus 0x4000C000
+    0 -> nvic@23
+
+// Flash controller status. efc_perform_read_sequence (reading the chip's unique identifier) issues a
+// command, waits for FRDY to clear, reads, then waits for FRDY to set again. A constant value hangs
+// one of those two waits, so alternate ready and not-ready with no error bits. Note the unique ID
+// this yields is whatever the flash image holds at that address, i.e. deterministic but meaningless.
+EFC_FSR: Python.PythonPeripheral @ sysbus 0x400E0C08
+    size: 0x4
+    initable: true
+    script: '''
+if request.IsInit:
+    lastVal = 0
+else:
+    lastVal = 1 - lastVal
+    request.Value = lastVal
+'''
+
+// CAN CC Control Register. CanDevice::Enable clears CCCR.INIT and spins until it reads back clear;
+// Disable does the reverse. An SVD stub ignores writes and returns the reset value, which hangs one
+// or the other, so give the register real storage. Nothing else about MCAN is modelled - expansion
+// boards will not appear until there is a proper MCAN model.
+MCAN0_CCCR: Python.PythonPeripheral @ sysbus 0x40030018
+    size: 0x4
+    initable: true
+    script: '''
+if request.IsInit:
+    cccr = 0x1
+elif request.IsRead:
+    request.Value = cccr
+else:
+    cccr = request.Value
+'''
+
+MCAN1_CCCR: Python.PythonPeripheral @ sysbus 0x40034018
+    size: 0x4
+    initable: true
+    script: '''
+if request.IsInit:
+    cccr = 0x1
+elif request.IsRead:
+    request.Value = cccr
+else:
+    cccr = request.Value
+'''
+
+// USB device controller status. TinyUSB's dcd_connect spins waiting for UTMI CLKUSABLE before it
+// will bring the device up, and without USB there is no console on this board. This reports the clock
+// as permanently usable and models nothing else; a real USBHS model is a project of its own.
+USBHS_SR: Python.PythonPeripheral @ sysbus 0x40038804
+    size: 0x4
+    initable: true
+    script: "request.Value = 0x4000"
+
 trng: Miscellaneous.SAM_TRNG @ sysbus 0x40070000
 
 // PMC status register. Clock setup busy-waits on bits here (MOSCXTS, LOCKA, MCKRDY); alternating

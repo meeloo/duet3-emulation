@@ -1,6 +1,8 @@
 :name: Duet 3 MB6HC boot probe
 :description: Loads the CRC-appended .bin (which is what a real board runs) and traces where it gets to.
 
+include $tcmodel
+
 mach create "duet3_mb6hc"
 machine LoadPlatformDescription $plat
 
@@ -16,4 +18,9 @@ logFile $logfile true
 #cpu LogFunctionNames true
 
 emulation RunFor "0.3"
+
+# The step clock is the whole point of the TC model, so say what it reached. At 750kHz, 0.3s of
+# emulated time should land near 225000 ticks.
+echo "step clock after run:"
+tc0 StepClock
 quit
