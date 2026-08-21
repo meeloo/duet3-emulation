@@ -53,6 +53,7 @@ exec tail -f /dev/null | ./renode --disable-xwt --console \\
     -e "\\\$afecmodel=@${EMU}/peripherals/SAME70_AnalogFrontEnd.cs" \\
     -e "\\\$xdmacmodel=@${EMU}/peripherals/SAME70_Xdmac.cs" \\
     -e "\\\$hsmcimodel=@${EMU}/peripherals/SAME70_Hsmci.cs" \\
+    -e "\\\$rstcmodel=@${EMU}/peripherals/SAME70_ResetController.cs" \\
     -e "\\\$sd=@$GUEST_SD" \\
     -e "\\\$fw=@${EMU}/build/firmware_sd.bin" \\
     -e "\\\$elf=@${EMU}/build/firmware_sd.elf" \\

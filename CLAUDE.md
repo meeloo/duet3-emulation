@@ -55,6 +55,14 @@ nothing here proves a real TMC5160 would follow the pulses. Say so when reportin
   Register-map inspection cannot catch this class of bug; only running the real driver does.
 - `machine SdCardFromFile ... false` attaches a card whose writes are discarded on exit. Pass `true`
   or writing appears to work and then silently loses everything.
+- **Boot vectors must be set inside a `macro reset`, not as plain commands.** Renode re-runs a macro
+  named `reset` after every machine reset; `cpu VectorTableOffset` issued at top level does not
+  survive one. Without the macro a firmware-initiated reset brings the core back with VTOR at 0, on an
+  empty ITCM, and it never executes again - indistinguishable from the reset having been ignored.
+- A firmware that stops answering the network the instant you press **reboot** is not a networking
+  fault. `ResetProcessor()` ends in `for(;;){}`; if the reset never arrives the board wedges there
+  with the stack dead. Renode keeps running and every process looks healthy, which is why this reads
+  as "the emulator lost the network".
 - `HttpResponder::GetJsonResponse` is close to the ARM Thumb branch limit. Adding a small `else if`
   chain broke the **link** with `dangerous relocation`. Check size before adding to it.
 

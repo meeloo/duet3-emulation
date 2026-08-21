@@ -5,11 +5,18 @@ mach create "duet3_mb6hc"
 machine LoadPlatformDescription @platforms/cpus/sam_e70.repl
 
 # The .bin is the artefact the CRC covers; the .elf only supplies symbols.
-sysbus LoadBinary $fw 0x400000
-sysbus LoadSymbolsFrom $elf
-cpu VectorTableOffset 0x400000
-cpu PC `sysbus ReadDoubleWord 0x400004`
-cpu SP `sysbus ReadDoubleWord 0x400000`
+# Renode re-runs the "reset" macro on every machine reset, so the boot vectors are
+# re-applied when the firmware resets itself (M999 / DWC reboot). Setting VectorTableOffset
+# once outside a macro does not survive: the core would restart on an empty ITCM.
+macro reset
+"""
+    sysbus LoadBinary $fw 0x400000
+    sysbus LoadSymbolsFrom $elf
+    cpu VectorTableOffset 0x400000
+    cpu PC `sysbus ReadDoubleWord 0x400004`
+    cpu SP `sysbus ReadDoubleWord 0x400000`
+"""
+runMacro $reset
 
 logLevel 3 sysbus
 logFile $logfile true

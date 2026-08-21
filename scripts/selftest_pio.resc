@@ -3,6 +3,7 @@
 
 include $tcmodel
 include $piomodel
+include $rstcmodel
 
 mach create "piotest"
 machine LoadPlatformDescription $plat

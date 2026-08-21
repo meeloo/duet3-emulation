@@ -31,13 +31,22 @@ def build_script(args, firmware, elf):
         f'include @{EMU}/peripherals/SAME70_AnalogFrontEnd.cs',
         f'include @{EMU}/peripherals/SAME70_Xdmac.cs',
         f'include @{EMU}/peripherals/SAME70_Hsmci.cs',
+        f'include @{EMU}/peripherals/SAME70_ResetController.cs',
         'mach create "duet3_mb6hc"',
         f'machine LoadPlatformDescription @{EMU}/platforms/duet3_mb6hc.repl',
-        f'sysbus LoadBinary @{firmware} 0x400000',
-        f'sysbus LoadSymbolsFrom @{elf}',
-        'cpu VectorTableOffset 0x400000',
-        'cpu PC `sysbus ReadDoubleWord 0x400004`',
-        'cpu SP `sysbus ReadDoubleWord 0x400000`',
+        # Renode re-runs a macro named "reset" after every machine reset, so this restores the boot
+        # vectors when the firmware resets itself (M999, DWC's reboot button). Issued as plain commands
+        # the core would come back with VTOR at 0, land on an empty ITCM and never run again - which
+        # looks like the reset request having been ignored rather than half-completed.
+        'macro reset',
+        '"""',
+        f'    sysbus LoadBinary @{firmware} 0x400000',
+        f'    sysbus LoadSymbolsFrom @{elf}',
+        '    cpu VectorTableOffset 0x400000',
+        '    cpu PC `sysbus ReadDoubleWord 0x400004`',
+        '    cpu SP `sysbus ReadDoubleWord 0x400000`',
+        '"""',
+        'runMacro $reset',
         f'sysbus AddWatchpointHook {USART2_THR:#x} 4 Write "print \'TX %d\' % value"',
         'logLevel 3',
     ]

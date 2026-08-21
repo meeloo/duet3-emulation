@@ -13,7 +13,6 @@ cpu: CPU.CortexM @ sysbus
     // The SAME70's Cortex-M7 has 16 MPU regions. Renode defaults to 8, and that is not a detail:
     // RepRapFirmware configures region 8 during init and the CPU aborts on a non-existent region.
     numberOfMPURegions: 16
-
 nvic: IRQControllers.NVIC @ sysbus 0xE000E000
     priorityMask: 0xE0
     systickFrequency: 300000000
@@ -91,6 +90,10 @@ afec1: Analog.SAME70_AnalogFrontEnd @ sysbus 0x40064000
 
 // SD card. Renode's SDCard model does the card side; this is only the SAME70 controller. Attach an
 // image at run time with:  machine SdCardFromFile @sdcard.img hsmci 0x8000000 false "sd"
+// Reset controller. Without this a software reset (M999, or DWC's reboot button) is silently
+// discarded and the firmware wedges in ResetProcessor's for(;;) loop with the network stack dead.
+rstc: Miscellaneous.SAME70_ResetController @ sysbus 0x400E1800
+
 hsmci: SD.SAME70_Hsmci @ sysbus 0x40000000
 
 // DMA. RepRapFirmware moves SD data with XDMAC rather than through HSMCI itself, so the card is
