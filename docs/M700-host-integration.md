@@ -72,13 +72,17 @@ within itself. With `M201 X1000` (1000 mm/s²) and `P=20ms` that is 40 mm/s. `M7
 than letting you command a speed that silently will not happen.
 
 **If you want both low latency and high speed, raise acceleration.** `M201 X4000` with `P=20ms` gives
-160 mm/s at the same 50 ms latency. That is the real lever; `P` alone trades one against the other.
+160 mm/s at the same ~38 ms latency. That is the real lever; `P` alone trades one against the other.
 
-**The defaults are already the measured optimum — do not "tune" them shorter.** Below about 40 ms of
-queued motion latency stops following `D×P` and gets *worse*: `Move` wants roughly 50 ms of prepared
-motion before it will run moves, so `D=2, P=10` measures 127 ms against 50 ms for `D=2, P=20`.
-Doubling the command rate changed the result by 0.3 ms, so this floor is in the firmware, not in how
-fast you can send.
+**The defaults are already the measured optimum — do not "tune" them shorter.** `D=2, P=20` measures
+38.5 ms. Above that, latency tracks the queued time `D×P` as a FIFO should (`P=25` -> 67 ms, `P=30` ->
+90 ms). Below about 40 ms of queued motion it stops following `D×P` and gets *worse*, and `P=10`
+cannot sustain 15 mm/s at all. Shortening the chunk adaptively for slow jogs was tried and measured
+much worse (1->3 mm/s: 79 -> 245 ms).
+
+The cause of that sub-40 ms floor is **not** identified. It is not the preparation window (halving
+`MoveTiming::UsualMinimumPreparedTime` moved it 0.1 ms), not the lookahead grace period (`M595 R0` is
+worth ~2 ms), and not the host command rate (doubling it changed 0.3 ms).
 
 So for a joystick, just send:
 
