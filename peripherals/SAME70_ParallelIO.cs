@@ -59,9 +59,17 @@ namespace Antmicro.Renode.Peripherals.GPIOPort
                 case RegisterOdsr:
                     return outputData;
                 case RegisterPdsr:
-                    // Nothing drives the inputs, so an input pin reads back whatever its pull-up says.
-                    // Output pins read back what we are driving.
-                    return (outputData & outputEnabled) | (~outputEnabled & ~pullUpDisabled);
+                {
+                    // Output pins read back what we drive. Input pins read their pull-up, unless
+                    // something outside the chip is holding them - which is how the emulator says a
+                    // card is in the slot, a switch is closed, and so on. Without this every input
+                    // reads high, and an active-low signal like SD card detect looks permanently
+                    // inactive: the firmware then never talks to the card at all.
+                    var inputs = ~outputEnabled;
+                    return (outputData & outputEnabled)
+                         | (inputs & drivenInputs & drivenLevels)
+                         | (inputs & ~drivenInputs & ~pullUpDisabled);
+                }
                 case RegisterImr:
                     return interruptMask;
                 case RegisterIsr:
@@ -127,6 +135,11 @@ namespace Antmicro.Renode.Peripherals.GPIOPort
 
         public IReadOnlyDictionary<int, IGPIO> Connections { get; }
 
+        // Pins held by something outside the chip, and the levels they are held at. Set both from the
+        // platform file, e.g. DrivenInputs: 0x20000000 with DrivenLevels: 0 to pull one pin low.
+        public uint DrivenInputs { get; set; }
+        public uint DrivenLevels { get; set; }
+
         // Bits to log edges for. Zero means log nothing, which is the sane default: PIO traffic is
         // heavy and tracing all of it would swamp the log.
         public uint TraceMask { get; set; }
@@ -183,6 +196,8 @@ namespace Antmicro.Renode.Peripherals.GPIOPort
         private uint interruptMask;
         private uint multiDriveEnabled;
         private uint pullUpDisabled;
+        private uint drivenInputs => DrivenInputs;
+        private uint drivenLevels => DrivenLevels;
         private ulong edgeCount;
 
         private const int NumPins = 32;

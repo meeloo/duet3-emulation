@@ -47,6 +47,14 @@ nothing here proves a real TMC5160 would follow the pulses. Say so when reportin
 - `pkill -f` is case-sensitive: matching `Renode` never kills `./renode`. Zombie instances keep `tap0`
   open and serve **stale firmware**, which shows up as HTTP responses containing strings that are
   provably not in the binary you just built. If you see that, count the instances first.
+- **Some registers behave differently when read repeatedly.** `HSMCI_RSPR` is a FIFO, not four
+  addressable words: `hsmci_get_response_128` reads `RSPR[0]` four times and the hardware
+  auto-increments. Returning the same word each time gave a CSD of one word repeated, which decodes
+  to a capacity of zero, which made `disk_read` reject every sector including sector 0 - so not one
+  block read was ever issued and the card looked dead while every register value looked correct.
+  Register-map inspection cannot catch this class of bug; only running the real driver does.
+- `machine SdCardFromFile ... false` attaches a card whose writes are discarded on exit. Pass `true`
+  or writing appears to work and then silently loses everything.
 - `HttpResponder::GetJsonResponse` is close to the ARM Thumb branch limit. Adding a small `else if`
   chain broke the **link** with `dangerous relocation`. Check size before adding to it.
 

@@ -35,5 +35,7 @@ connector Connect host.tap switch
 emulation CreateServerSocketTerminal 3456 "aux2" false
 connector Connect sysbus.usart2 aux2
 
-logLevel 2
+# Errors only. This instance runs for hours, and at warning level the SVD-stubbed peripherals
+# produce enough output to fill a filesystem - which is exactly what happened.
+logLevel 3
 start

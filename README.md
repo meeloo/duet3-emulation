@@ -20,7 +20,8 @@ branch `feature/velocity-jog`.
 | Sensors | Thermistors, VREF/VSSA, VIN, MCU temperature — all report plausible values |
 | Network | Ethernet up, HTTP API reachable from the host |
 | DWC / AxisControl | Both connect and work, including the file browser |
-| Filesystem | Read-only, compiled into the image (`files/`) |
+| Filesystem | Two options: a **writable FAT32 SD card** over emulated HSMCI, or a read-only one compiled into the image (`files/`) |
+| SD card | Real card image, read and write, changes persist to the file |
 
 Verified examples:
 
@@ -37,8 +38,7 @@ $ curl -s http://localhost:8080/rr_connect?password=
 
 | | Why |
 |---|---|
-| **Writing files** | The filesystem is compiled into flash and is read-only. Upload/delete/move/mkdir are refused. Editing config means rebuild + restart. |
-| **SD card (HSMCI)** | Not modelled. This is what would make the filesystem writable and let the board host DWC's `/www` itself. |
+| **Writing files (embedded build only)** | With `USE_EMBEDDED_FILES` the filesystem is in flash and read-only. Use the SD card build instead, which is writable. |
 | **Stepper drivers (TMC5160)** | Not modelled — needs XDMAC and USART-in-SPI-mode first. Motion is unaffected (steps come from the TC/PIO path) but driver *status* is not meaningful. |
 | **CAN expansion** | Only `MCAN CCCR` has storage. No expansion boards. |
 | **USB** | Only `USBHS_SR` is faked, enough to get past TinyUSB's init spin. No USB console. |
@@ -95,6 +95,18 @@ path** on purpose, because Renode resolves relative paths against its own instal
 same path must work from macOS and the Lima guest.
 
 Point the tools at your Renode with `RENODE_DIR`, or edit `DEFAULT_RENODE` in `tools/run_gcode.py`.
+
+## Running with an SD card
+
+```sh
+tools/make_sdcard.sh                     # 64MB FAT32 image built from files/
+tools/run_gcode.py --sdcard build/sdcard.img --settle 6.0 "M115" "M20"
+```
+
+Writes persist to the image. `M28`/`M29`, DWC uploads and `M30` all work.
+
+Use the SD build (`build/firmware_sd.bin`, from the normal `Duet3_MB6HC` config plus
+`Scripts/CrcAppender.py`) rather than the embedded-files one, which has mass storage compiled out.
 
 ## Running: motion (macOS, no VM)
 
@@ -155,6 +167,8 @@ files/        the embedded filesystem: config.g, macros, gcodes
 | `SAME70_TimerCounter.cs` | The step clock. Two chained 16-bit channels at 750kHz. The RB compare is deliberately 16-bit, as the hardware is. |
 | `SAME70_ParallelIO.cs` | STEP/DIR observation. All six MB6HC step pins are on PIOC; `TraceMask` logs edges with emulated timestamps. |
 | `SAME70_AnalogFrontEnd.cs` | Sensors. RRF computes completed conversions as `CHSR & ISR & ~OVER`; with stubs that is always empty, so nothing ever converted. |
+| `SAME70_Hsmci.cs` | SD card controller. Renode's `SDCard` is the card; this is the SAME70 side. |
+| `SAME70_Xdmac.cs` | DMA. SD data moves by XDMAC, not through HSMCI's FIFO, so the card is unusable without it. |
 
 Everything else is left to the SVD fallback, which returns reset values and logs the access — and that
 log is the to-do list for what to model next.

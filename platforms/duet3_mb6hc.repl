@@ -65,6 +65,10 @@ phy: Network.EthernetPhysicalLayer @ gem 0
 // pins 18, 16, 28, 1, 4, 9 (drivers 0-5) from Config/Pins_Duet3_MB6HC.h. DIR pins are spread over
 // PIOA, PIOB, PIOC and PIOD, so add those masks when direction matters too.
 pioa: GPIOPort.SAME70_ParallelIO @ sysbus 0x400E0E00
+    // PA29 is SD card detect and is active low (MassStorage.cpp treats a high read as "no card").
+    // Holding it low is what tells RepRapFirmware a card is in slot 0.
+    DrivenInputs: 0x20000000
+    DrivenLevels: 0x00000000
 piob: GPIOPort.SAME70_ParallelIO @ sysbus 0x400E1000
 pioc: GPIOPort.SAME70_ParallelIO @ sysbus 0x400E1200
     TraceMask: 0x10050212
@@ -84,6 +88,14 @@ afec1: Analog.SAME70_AnalogFrontEnd @ sysbus 0x40064000
     // thermistor readings are meaningless regardless of what the thermistor channels say.
     // ch2, 4, 5, 6 = thermistors 0-3 at 16031, which is 100k against the 2200R series resistor, i.e. 25C.
     Channels: "1:0,9:65535,2:64124,4:64124,5:64124,6:64124"
+
+// SD card. Renode's SDCard model does the card side; this is only the SAME70 controller. Attach an
+// image at run time with:  machine SdCardFromFile @sdcard.img hsmci 0x8000000 false "sd"
+hsmci: SD.SAME70_Hsmci @ sysbus 0x40000000
+
+// DMA. RepRapFirmware moves SD data with XDMAC rather than through HSMCI itself, so the card is
+// unusable without this.
+xdmac: DMA.SAME70_Xdmac @ sysbus 0x40078000
 
 // Step clock. Channel 0 is the low 16 bits and channel 2 the high 16, chained; see the model.
 // Only channel 0's interrupt is wired because that is the only one RepRapFirmware enables (ID_TC0 = 23).

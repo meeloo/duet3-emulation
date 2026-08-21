@@ -6,7 +6,10 @@ EMU=/Users/smetrot/work/duet3/duet3-emulation
 BOARD_IP=192.168.100.50
 FORWARD_PORT=8080
 RENODE_DIR="$HOME/renode-portable"
-LAUNCH=/tmp/renode_launch.sh
+LAUNCH="$HOME/renode_launch.sh"
+
+# Logs go to $HOME, not /tmp: /tmp is a 2.9GB tmpfs in the Lima guest and an unbounded Renode log
+# filled it completely, which then broke every later step with confusing "no space left" errors.
 
 # Kill previous instances properly. This used to be pkill -f 'Renode' with a capital R, which never
 # matched "./renode" - so old instances survived, kept tap0 open, and went on answering HTTP with
@@ -28,7 +31,7 @@ sudo ip addr replace 192.168.100.1/24 dev tap0
 sudo ip link set tap0 up
 
 # Lima republishes guest ports bound to 0.0.0.0, so this surfaces as localhost:8080 on the Mac.
-setsid nohup socat TCP-LISTEN:${FORWARD_PORT},fork,reuseaddr TCP:${BOARD_IP}:80 >/tmp/socat.log 2>&1 </dev/null &
+setsid nohup socat TCP-LISTEN:${FORWARD_PORT},fork,reuseaddr TCP:${BOARD_IP}:80 >"$HOME/socat.log" 2>&1 </dev/null &
 
 # Generated rather than inlined: the launcher needs ${EMU} expanded now but Renode's own $variables
 # left alone, which is fiddly to get right inside nested quoting - this went wrong twice.
@@ -50,5 +53,11 @@ chmod +x "$LAUNCH"
 
 # setsid, not just nohup: a process started through "limactl shell" belongs to that SSH session's
 # process group and dies when the session ends, which silently took Renode down mid-boot.
-setsid nohup "$LAUNCH" >/tmp/renode.log 2>&1 </dev/null &
+setsid nohup "$LAUNCH" >"$HOME/renode.log" 2>&1 </dev/null &
 echo "launched"
+
+# Leaving socat up after Renode exits makes port 8080 look open while nothing is behind it, which
+# reads as "the board is unreachable" rather than "the board is not running".
+( sleep 5
+  while pgrep -x renode >/dev/null 2>&1; do sleep 10; done
+  pkill -f "socat.*${FORWARD_PORT}" 2>/dev/null || true ) >/dev/null 2>&1 &

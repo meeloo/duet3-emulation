@@ -29,6 +29,8 @@ def build_script(args, firmware, elf):
         f'include @{EMU}/peripherals/SAME70_TimerCounter.cs',
         f'include @{EMU}/peripherals/SAME70_ParallelIO.cs',
         f'include @{EMU}/peripherals/SAME70_AnalogFrontEnd.cs',
+        f'include @{EMU}/peripherals/SAME70_Xdmac.cs',
+        f'include @{EMU}/peripherals/SAME70_Hsmci.cs',
         'mach create "duet3_mb6hc"',
         f'machine LoadPlatformDescription @{EMU}/platforms/duet3_mb6hc.repl',
         f'sysbus LoadBinary @{firmware} 0x400000',
@@ -38,6 +40,14 @@ def build_script(args, firmware, elf):
         'cpu SP `sysbus ReadDoubleWord 0x400000`',
         f'sysbus AddWatchpointHook {USART2_THR:#x} 4 Write "print \'TX %d\' % value"',
         'logLevel 3',
+    ]
+    if args.sdcard:
+        # Renode's SDCard model provides the card; our SAME70_Hsmci is only the controller.
+        # persistent=true, so writes reach the backing image and survive a restart. With false the
+        # card works but every change is discarded when the emulator exits, which looks like the
+        # filesystem silently refusing writes.
+        lines.append(f'machine SdCardFromFile @{args.sdcard} hsmci 0x4000000 true "sd"')
+    lines += [
     ]
     if args.trace_steps:
         # The PIO model logs traced edges at Info with the emulated timestamp; everything else stays quiet.
@@ -75,6 +85,7 @@ def main():
                         help='CRC-appended USE_EMBEDDED_FILES .bin')
     parser.add_argument('--elf', default=os.environ.get('DUET_ELF'))
     parser.add_argument('--raw', action='store_true', help='also print the raw Renode output')
+    parser.add_argument('--sdcard', help='raw SD card image to attach to HSMCI')
     parser.add_argument('--trace-afec', action='store_true', help='log AFEC channel enables')
     parser.add_argument('--trace-steps', action='store_true', help='log every step-pin edge with its emulated timestamp')
     parser.add_argument('--edge-log', help='write parsed edges to this file as "microseconds pin level"')
