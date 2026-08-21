@@ -7,6 +7,8 @@
 include $tcmodel
 include $piomodel
 include $afecmodel
+include $xdmacmodel
+include $hsmcimodel
 
 mach create "duet3_mb6hc"
 machine LoadPlatformDescription $plat
@@ -20,6 +22,9 @@ cpu SP `sysbus ReadDoubleWord 0x400000`
 # The TAP is not something the MAC attaches to directly. connector Connect takes
 # (IEmulationElement, IConnectable), and the switch is the IConnectable hub - so the MAC and the host
 # TAP each connect to the switch, and the switch bridges them.
+# A real, writable FAT32 card. persistent=true so DWC uploads and edits survive a restart.
+machine SdCardFromFile $sd hsmci 0x4000000 true "sd"
+
 emulation CreateSwitch "switch"
 connector Connect gem switch
 # The TAP registers under the "host." namespace, not under the bare name given to CreateTap - so

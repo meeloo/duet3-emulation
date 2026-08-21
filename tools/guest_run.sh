@@ -27,6 +27,13 @@ if pgrep -x renode >/dev/null 2>&1; then
 fi
 
 # tap0 is created and addressed by setup_guest.sh; make sure the address survived a previous run.
+# The SD image must be writable for persistent=true, and Lima mounts the home directory read-only -
+# opening it read-write fails and takes Renode down with a fatal I/O error. Work on a guest-local copy.
+GUEST_SD="$HOME/sdcard.img"
+if [ -f "$EMU/build/sdcard.img" ]; then
+    [ -f "$GUEST_SD" ] || cp "$EMU/build/sdcard.img" "$GUEST_SD"
+fi
+
 sudo ip addr replace 192.168.100.1/24 dev tap0
 sudo ip link set tap0 up
 
@@ -44,8 +51,11 @@ exec tail -f /dev/null | ./renode --disable-xwt --console \\
     -e "\\\$tcmodel=@${EMU}/peripherals/SAME70_TimerCounter.cs" \\
     -e "\\\$piomodel=@${EMU}/peripherals/SAME70_ParallelIO.cs" \\
     -e "\\\$afecmodel=@${EMU}/peripherals/SAME70_AnalogFrontEnd.cs" \\
-    -e "\\\$fw=@${EMU}/build/firmware.bin" \\
-    -e "\\\$elf=@${EMU}/build/firmware.elf" \\
+    -e "\\\$xdmacmodel=@${EMU}/peripherals/SAME70_Xdmac.cs" \\
+    -e "\\\$hsmcimodel=@${EMU}/peripherals/SAME70_Hsmci.cs" \\
+    -e "\\\$sd=@$GUEST_SD" \\
+    -e "\\\$fw=@${EMU}/build/firmware_sd.bin" \\
+    -e "\\\$elf=@${EMU}/build/firmware_sd.elf" \\
     -e "\\\$plat=@${EMU}/platforms/duet3_mb6hc.repl" \\
     -e "include @${EMU}/scripts/networked.resc"
 INNER
