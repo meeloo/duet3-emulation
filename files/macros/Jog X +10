@@ -1,0 +1,2 @@
+; Nudge X by 10mm using the velocity jog, for exercising M700 from DWC.
+M700 X10

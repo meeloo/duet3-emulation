@@ -8,10 +8,20 @@ FORWARD_PORT=8080
 RENODE_DIR="$HOME/renode-portable"
 LAUNCH=/tmp/renode_launch.sh
 
+# Kill previous instances properly. This used to be pkill -f 'Renode' with a capital R, which never
+# matched "./renode" - so old instances survived, kept tap0 open, and went on answering HTTP with
+# stale firmware while the new instance sat there unable to attach. Symptom: served responses
+# containing strings that are provably not in the binary you just built.
 pkill -f renode_launch 2>/dev/null || true
-pkill -f 'Renode' 2>/dev/null || true
+pkill -x renode 2>/dev/null || true
+pkill -f '\./renode' 2>/dev/null || true
 pkill -f "socat.*${FORWARD_PORT}" 2>/dev/null || true
-sleep 1
+sleep 2
+if pgrep -x renode >/dev/null 2>&1; then
+    echo "WARNING: renode still running after kill:" >&2
+    pgrep -a -x renode >&2
+    exit 1
+fi
 
 # tap0 is created and addressed by setup_guest.sh; make sure the address survived a previous run.
 sudo ip addr replace 192.168.100.1/24 dev tap0
