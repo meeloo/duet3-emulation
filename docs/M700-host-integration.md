@@ -84,6 +84,21 @@ The cause of that sub-40 ms floor is **not** identified. It is not the preparati
 `MoveTiming::UsualMinimumPreparedTime` moved it 0.1 ms), not the lookahead grace period (`M595 R0` is
 worth ~2 ms), and not the host command rate (doubling it changed 0.3 ms).
 
+## The machine does not go "busy" while jogging
+
+`state.status` stays `idle` throughout a jog, by design. RRF normally reports `busy` whenever the
+machine is moving, which for continuous jogging means busy for as long as the stick is held - and a UI
+that greys its controls out when busy would disable the very panel sending the jog commands. As of the
+"Do not report busy while jogging" commit, jog motion does not count towards `busy`.
+
+**What this means for a client:** do not use `state.status` to decide whether a jog is in progress -
+it will read `idle`. Keep your own notion of "stick is deflected". Everything else behaves normally:
+`move.axes[].machinePosition` updates live, and an ordinary `G1` still reports `busy`, so an
+in-progress macro or file print is still distinguishable.
+
+If you were disabling the jog panel on `busy`, that check can stay - it will now simply never fire
+during jogging, which is the intended behaviour.
+
 So for a joystick, just send:
 
 ```
