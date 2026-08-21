@@ -20,14 +20,15 @@ M569 P0 S1                               ; X
 M569 P1 S1                               ; Y
 M569 P2 S1                               ; Z
 M569 P3 S1                               ; E
-M584 X0 Y1 Z2 E3
-M350 X16 Y16 Z16 E16 I1
-M92 X80 Y80 Z400 E420
-M203 X6000 Y6000 Z1000 E1200
-M201 X1000 Y1000 Z250 E250
-M566 X600 Y600 Z60 E300
+M569 P4 S1                               ; U (dust shoe)
+M584 X0 Y1 Z2 U4 E3
+M350 X16 Y16 Z16 U16 E16 I1
+M92 X80 Y80 Z400 U400 E420
+M203 X6000 Y6000 Z1000 U1000 E1200
+M201 X1000 Y1000 Z250 U250 E250
+M566 X600 Y600 Z60 U60 E300
 M906 X1200 Y1200 Z1200 E800 I30
-M208 X0:200 Y0:200 Z0:200
+M208 X0:200 Y0:200 Z0:200 U0:60   ; U is the dust shoe; its lower limit is what makes the shoe rest on the work
 
 ; --- Heaters and sensors ------------------------------------------------------------------------
 M308 S0 P"temp0" Y"thermistor" T100000 B4725 C7.06e-8 A"Bed"
