@@ -61,6 +61,10 @@ def build_script(args, firmware, elf):
     for command in args.gcode:
         # The echo goes into a Renode script, so a quote in the G-code would end the string early.
         lines.append('echo "SENT {0}"'.format(command.replace('"', "'")))
+        if args.trace_steps:
+            # Label the mark with the command: the causative command is often several marks earlier
+            # than the moment the step train changes, and an unlabelled mark cannot tell them apart.
+            lines.append('pioc Mark "{0}"'.format(command.replace('"', "'").replace(' ', '_')))
         for ch in command + "\n":
             lines.append(f'usart2 WriteChar {ord(ch):#x}')
         lines.append(f'emulation RunFor "{args.after}"')
@@ -110,10 +114,14 @@ def main():
         print(result.stdout)
 
     if args.edge_log:
-        edges = re.findall(r'pioc:\s+([\d.]+) pin (\d+) -> (\d)', result.stdout)
+        events = re.findall(r'pioc:\s+([\d.]+) (?:pin (\d+) -> (\d)|mark (\S+))', result.stdout)
         with open(args.edge_log, 'w') as handle:
-            for micros, pin, level in edges:
-                handle.write(f"{micros} {pin} {level}\n")
+            for micros, pin, level, mark in events:
+                if mark:
+                    handle.write(f"{micros} MARK {mark}\n")
+                else:
+                    handle.write(f"{micros} {pin} {level}\n")
+        edges = events
         print(f"--- wrote {len(edges)} edges to {args.edge_log}")
 
     # Interleave what we sent with what came back, decoding TX bytes into text.

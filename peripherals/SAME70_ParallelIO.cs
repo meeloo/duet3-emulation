@@ -144,6 +144,14 @@ namespace Antmicro.Renode.Peripherals.GPIOPort
         // heavy and tracing all of it would swamp the log.
         public uint TraceMask { get; set; }
 
+        // Emit a timestamped marker into the same log as the pin traces, so a test can measure the
+        // delay between issuing a command and the step train reacting to it. Both use the same clock,
+        // which is the point - correlating two different time bases is how latency numbers go wrong.
+        public void Mark(string label)
+        {
+            this.Log(LogLevel.Info, "{0} mark {1}", machine.ElapsedVirtualTime.TimeElapsed.TotalMicroseconds, label);
+        }
+
         // Number of traced edges seen. Cheap way for a test to assert that a move actually stepped.
         public ulong EdgeCount => edgeCount;
 
