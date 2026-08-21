@@ -1,5 +1,18 @@
 # Duet emulation on Renode
 
+MIT licensed (see LICENSE). Contains no RepRapFirmware code; the platform description started from
+Renode's `platforms/cpus/sam_e70.repl`, which is MIT, and the peripheral models are written against
+Renode's API from the SAME70 datasheet.
+
+**Two setup notes before anything works:**
+
+* Run `tools/fetch_svd.sh` once. The SAME70 SVD is not committed - it is Microchip's register
+  description and this project has no clear right to redistribute it.
+* `platforms/duet3_mb6hc.repl` refers to that SVD by **absolute path**, currently under
+  `/Users/smetrot/work/duet3/duet3-emulation`. Renode resolves relative paths against its own install
+  directory rather than the platform file, and the same path has to work from both macOS and the Lima
+  guest, so this is deliberate - but you must edit it to match your checkout.
+
 Emulating Duet control boards well enough to run real RepRapFirmware images, so that firmware
 behaviour — motion above all — can be observed and asserted without hardware.
 
