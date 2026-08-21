@@ -79,14 +79,21 @@ height is a machine property and belongs in configuration, not firmware.
 The second half stops being true once firmware tracking is on — U follows Z continuously, not just at
 tool changes, and it does so without the offset trick.
 
-### 4. There is currently no way to read the state back
+### 4. Read the state from the object model
 
-`M604` with no parameters reports as text; there is no object-model field for it. So a UI cannot show
-engaged/disengaged without either parsing that reply or continuing to read `global.dustShoeEngaged` —
-which is another reason to keep the global.
+`move.axisFollower` carries the state, so there is no need to parse the text of an `M604` report:
 
-If a proper object-model field would be useful, say so and it can be added to the firmware; that is a
-better fix than parsing text.
+```json
+{"engaged":true,"follower":"U","leader":"Z","offset":70.000,"scale":-1.000}
+```
+
+`follower` and `leader` are empty strings when nothing is configured, and `engaged` is flagged `live`
+so it arrives with the frequently-updated part of the model.
+
+Note this is *firmware* state. It is not a substitute for `global.dustShoeEngaged`, which still has to
+exist because the tool-change hooks are gated on it (see above) — but it is the right thing for a UI
+to display, because it reflects what the motion planner is actually doing rather than what a macro
+last set.
 
 ## What has not changed
 
