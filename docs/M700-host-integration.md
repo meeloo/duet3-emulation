@@ -22,9 +22,9 @@ M700 X<speed> Y<speed> Z<speed> ... [S0] [P<ms>] [R<ms>] [D<n>]
 |---|---|
 | axis letters | Signed speed for that axis, **mm/sec** (degrees/sec for rotational axes). `G20` does **not** rescale these — always machine units. |
 | `S0` | Stop jogging now (decelerates normally). |
-| `P` | Chunk time in ms, 10–200. Tuning; see *Latency*. |
+| `P` | Chunk time in ms, 10–200, default 20. Tuning; see *Latency*. |
 | `R` | Watchdog timeout in ms, default 250. |
-| `D` | Queue depth, 2–8. Tuning; see *Latency*. |
+| `D` | Queue depth, 2–8, default 2. Tuning; see *Latency*. |
 | *(none)* | Report status. |
 
 ### Three rules that matter
@@ -60,7 +60,8 @@ changing rate.
 |---|---|---|---|
 | 5 | 50 ms | 257 ms | 100 mm/s |
 | 3 | 20 ms | 126 ms | 40 mm/s |
-| **2** | **20 ms** | **50 ms** | **40 mm/s** |
+| **2 (default)** | **20 ms** | **50 ms** | **40 mm/s** |
+| 2 | 15 ms | 62 ms | 30 mm/s |
 | 2 | 10 ms | 127 ms | 20 mm/s |
 
 Two things to understand:
@@ -73,15 +74,16 @@ than letting you command a speed that silently will not happen.
 **If you want both low latency and high speed, raise acceleration.** `M201 X4000` with `P=20ms` gives
 160 mm/s at the same 50 ms latency. That is the real lever; `P` alone trades one against the other.
 
-Latency stops improving below roughly 40 ms of queued motion (`D×P`), for reasons still being
-investigated — so treat **~50 ms as the practical floor** for now and do not assume `D=2, P=10` is
-better than `D=2, P=20`. It measured worse.
+**The defaults are already the measured optimum — do not "tune" them shorter.** Below about 40 ms of
+queued motion latency stops following `D×P` and gets *worse*: `Move` wants roughly 50 ms of prepared
+motion before it will run moves, so `D=2, P=10` measures 127 ms against 50 ms for `D=2, P=20`.
+Doubling the command rate changed the result by 0.3 ms, so this floor is in the firmware, not in how
+fast you can send.
 
-Suggested starting point for a joystick:
+So for a joystick, just send:
 
 ```
-M700 P20 D2        ; once, at startup
-M700 X<vx> Y<vy>   ; then at 20-50 Hz
+M700 X<vx> Y<vy>   ; at 20-50 Hz. No P or D needed.
 ```
 
 ## How to send it
