@@ -108,6 +108,32 @@ You do not need `/rr_reply` for jogging — fire `rr_gcode` and ignore the respo
 `buff` value occasionally: it is the free space in the input buffer, and if it trends to zero you are
 sending faster than the board can consume.
 
+Verified: 40 `M700 X10` requests sent this way moved X by 6.8 mm, so jogging over HTTP works
+end to end.
+
+### Two HTTP gotchas that cost time
+
+**Percent-encode the brackets in indexed object model keys, and only the brackets.**
+
+```
+/rr_model?key=move.axes[0]        -> EMPTY RESPONSE. No error. Just nothing.
+/rr_model?key=move.axes%5B0%5D    -> works
+```
+
+Raw brackets fail *silently*, which reads as "that key does not exist" rather than "your URL is
+malformed". Non-indexed keys (`state`, `move`, `move.axes`, `heat`) work either way, so this only
+bites once you start indexing.
+
+**Do not blanket-encode the query.** `curl --data-urlencode "key=move.axes[0]"` gets
+`Your Duet rejected the HTTP request: bad escape`. Encode `[` and `]` yourself and leave the rest
+alone. (For `rr_gcode`, `--data-urlencode` *is* fine and handles the spaces in the command.)
+
+Reading position via `M114` + `/rr_reply` avoids the whole issue and is often simpler:
+
+```
+X:6.800 Y:0.000 Z:0.000 E:0.000 Count 544 0 0 Machine 6.800 0.000 0.000
+```
+
 Call `/rr_connect?password=` once at startup; it returns `{"err":0,...}` on success.
 
 ### Over serial
