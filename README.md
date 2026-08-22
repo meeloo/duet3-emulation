@@ -39,7 +39,7 @@ $ curl -s http://localhost:8080/rr_connect?password=
 | | Why |
 |---|---|
 | **Writing files (embedded build only)** | With `USE_EMBEDDED_FILES` the filesystem is in flash and read-only. Use the SD card build instead, which is writable. |
-| **Stepper drivers (TMC5160)** | Not modelled — needs XDMAC and USART-in-SPI-mode first. Motion is unaffected (steps come from the TC/PIO path) but driver *status* is not meaningful. |
+| **Stepper drivers (TMC5160)** | **Partial.** USART1 is modelled in SPI mode with a six-deep TMC5160 daisy chain, and the frames it receives are decoded and answered correctly. But the firmware sends only one frame at start-up and then stops, so driver reads never cycle and `M569.2` does not return — the cause is not yet identified. Motion is unaffected (steps come from the TC/PIO path); driver *status* is still not meaningful. |
 | **CAN expansion** | Only `MCAN CCCR` has storage. No expansion boards. |
 | **USB** | Only `USBHS_SR` is faked, enough to get past TinyUSB's init spin. No USB console. |
 | **Endstops, probes, real ADC dynamics** | Sensor channels hold fixed values; nothing changes with temperature or position. |

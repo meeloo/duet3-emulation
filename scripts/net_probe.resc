@@ -8,6 +8,7 @@
 include $tcmodel
 include $piomodel
 include $rstcmodel
+include $usartspimodel
 include $afecmodel
 
 mach create "duet3_mb6hc"

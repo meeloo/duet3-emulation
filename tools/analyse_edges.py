@@ -18,7 +18,9 @@ def load(path, pin):
     with open(path) as handle:
         for line in handle:
             parts = line.split()
-            if len(parts) != 3:
+            # --trace-steps interleaves "<micros> MARK <command>" lines into the same log; they have
+            # three fields too, so they have to be skipped by content rather than by field count.
+            if len(parts) != 3 or parts[1] == 'MARK':
                 continue
             micros, edge_pin, level = float(parts[0]), int(parts[1]), int(parts[2])
             if level == 1 and (pin is None or edge_pin == pin):

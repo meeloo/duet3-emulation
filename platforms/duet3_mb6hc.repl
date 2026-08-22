@@ -41,7 +41,10 @@ rom: Memory.MappedMemory @ sysbus 0x00800000
 usart0: UART.SAM_USART @ sysbus 0x40024000
     IRQ -> nvic@13
 
-usart1: UART.SAM_USART @ sysbus 0x40028000
+// USART1 is not a UART on this board: the six TMC5160s hang off it in SPI mode. Modelled as SPI so
+// driver reads return real register contents instead of nothing.
+usart1: SPI.SAME70_UsartSpi @ sysbus 0x40028000
+    numberOfDrivers: 6
     IRQ -> nvic@14
 
 usart2: UART.SAM_USART @ sysbus 0x4002c000
@@ -99,7 +102,6 @@ hsmci: SD.SAME70_Hsmci @ sysbus 0x40000000
 // DMA. RepRapFirmware moves SD data with XDMAC rather than through HSMCI itself, so the card is
 // unusable without this.
 xdmac: DMA.SAME70_Xdmac @ sysbus 0x40078000
-
 // Step clock. Channel 0 is the low 16 bits and channel 2 the high 16, chained; see the model.
 // Only channel 0's interrupt is wired because that is the only one RepRapFirmware enables (ID_TC0 = 23).
 tc0: Timers.SAME70_TimerCounter @ sysbus 0x4000C000

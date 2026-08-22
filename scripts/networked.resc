@@ -10,6 +10,7 @@ include $afecmodel
 include $xdmacmodel
 include $hsmcimodel
 include $rstcmodel
+include $usartspimodel
 
 mach create "duet3_mb6hc"
 machine LoadPlatformDescription $plat

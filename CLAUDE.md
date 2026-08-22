@@ -63,6 +63,15 @@ nothing here proves a real TMC5160 would follow the pulses. Say so when reportin
   fault. `ResetProcessor()` ends in `for(;;){}`; if the reset never arrives the board wedges there
   with the stack dead. Renode keeps running and every process looks healthy, which is why this reads
   as "the emulator lost the network".
+- **Wiring XDMAC's interrupt to the NVIC wedges the firmware.** `ID_XDMAC = 58` is genuinely
+  unconnected in the platform, and connecting it looks like a straightforward fidelity fix. It is not:
+  with it wired, `M115` stops answering and AFEC starts collapse from ~4255 to 86. Something about how
+  that interrupt is serviced is not modelled correctly. Left disconnected on purpose - do not "fix" it
+  without an oracle showing the firmware still runs.
+- The TMC task sends **exactly one** SPI frame and then stops, and has done so in every configuration
+  tried (before the USART SPI model, after it, with the XDMAC interrupt wired, and with `XDMAC_GIS`
+  implemented). Ruled out by measurement: the power gate (VIN reads 24V, V12 12V, thresholds are 10V)
+  and the SPI model itself (the one frame decodes correctly; the firmware simply stops writing bytes).
 - `HttpResponder::GetJsonResponse` is close to the ARM Thumb branch limit. Adding a small `else if`
   chain broke the **link** with `dangerous relocation`. Check size before adding to it.
 

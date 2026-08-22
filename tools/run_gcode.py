@@ -32,6 +32,7 @@ def build_script(args, firmware, elf):
         f'include @{EMU}/peripherals/SAME70_Xdmac.cs',
         f'include @{EMU}/peripherals/SAME70_Hsmci.cs',
         f'include @{EMU}/peripherals/SAME70_ResetController.cs',
+        f'include @{EMU}/peripherals/SAME70_UsartSpi.cs',
         'mach create "duet3_mb6hc"',
         f'machine LoadPlatformDescription @{EMU}/platforms/duet3_mb6hc.repl',
         # Renode re-runs a macro named "reset" after every machine reset, so this restores the boot
@@ -61,6 +62,8 @@ def build_script(args, firmware, elf):
     if args.trace_steps:
         # The PIO model logs traced edges at Info with the emulated timestamp; everything else stays quiet.
         lines.append('logLevel 1 pioc')
+    for name in args.log_peripheral or []:
+        lines.append(f'logLevel 0 {name}')
     if args.trace_afec:
         lines.append('logLevel 1 afec0')
         lines.append('logLevel 1 afec1')
@@ -83,6 +86,10 @@ def build_script(args, firmware, elf):
         'pioc EdgeCount',
         'echo "STEP CLOCK"',
         'tc0 StepClock',
+        'echo "TMC FRAMES"',
+        'usart1 FrameCount',
+        'echo "TMC BYTES"',
+        'usart1 BytesWritten',
         'quit',
     ]
     return "\n".join(lines) + "\n"
@@ -99,6 +106,8 @@ def main():
     parser.add_argument('--elf', default=os.environ.get('DUET_ELF'))
     parser.add_argument('--raw', action='store_true', help='also print the raw Renode output')
     parser.add_argument('--sdcard', help='raw SD card image to attach to HSMCI')
+    parser.add_argument('--log-peripheral', action='append',
+                        help='raise a named peripheral to debug logging, e.g. --log-peripheral usart1')
     parser.add_argument('--trace-afec', action='store_true', help='log AFEC channel enables')
     parser.add_argument('--trace-steps', action='store_true', help='log every step-pin edge with its emulated timestamp')
     parser.add_argument('--edge-log', help='write parsed edges to this file as "microseconds pin level"')
