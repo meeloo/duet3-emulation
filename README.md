@@ -7,8 +7,18 @@ MIT licensed. Contains no RepRapFirmware code: the platform description started 
 MIT-licensed `platforms/cpus/sam_e70.repl`, and the peripheral models are written against Renode's API
 from the SAME70 datasheet.
 
-Firmware changes it depends on live in a GPLv3 fork: [`meeloo/RepRapFirmware`](https://github.com/meeloo/RepRapFirmware),
-branch `feature/velocity-jog`.
+Firmware changes it depends on live in a GPLv3 fork: [`meeloo/RepRapFirmware`](https://github.com/meeloo/RepRapFirmware).
+`feature/velocity-jog` is everything together; it is also split into reviewable branches:
+
+| branch | what |
+|---|---|
+| `upstream/velocity-jog-m700` | M700 velocity jogging |
+| `upstream/axis-following-m604` | M604 axis following (stacks on M700) |
+| `upstream/fix-embedded-files-compile` | `USE_EMBEDDED_FILES` does not compile on 3.7.0-beta.3 |
+| `upstream/fix-embedded-file-api` | file API is hidden on embedded builds, and returned invalid JSON |
+| `upstream/fix-embedded-dir-listing` | directory listing on embedded filesystems |
+| `upstream/host-unit-tests` | host-native test harness |
+| `build/embedded-mb6hc-config` | the embedded build config this emulator uses |
 
 ## What works
 
@@ -20,8 +30,10 @@ branch `feature/velocity-jog`.
 | Sensors | Thermistors, VREF/VSSA, VIN, MCU temperature — all report plausible values |
 | Network | Ethernet up, HTTP API reachable from the host |
 | DWC / AxisControl | Both connect and work, including the file browser |
-| Filesystem | Two options: a **writable FAT32 SD card** over emulated HSMCI, or a read-only one compiled into the image (`files/`) |
-| SD card | Real card image, read and write, changes persist to the file |
+| Filesystem | A **writable FAT32 SD card** over emulated HSMCI (a real image; reads, writes and `M28`/`M29`/`M30` all persist to the file), or a read-only one compiled into the image (`files/`) |
+| Reboot | `M999` and DWC's reboot button reset the board and it comes back |
+| Velocity jogging | M700 exercised end to end; latency measured from command to step-rate change |
+| Axis following | M604 exercised end to end; follower-to-leader skew measured |
 
 Verified examples:
 
@@ -32,7 +44,21 @@ $ tools/run_gcode.py --after 2.0 "G91" "G1 X10 F600" "M114"
 
 $ curl -s http://localhost:8080/rr_connect?password=
 {"err":0,"boardType":"duet3mb6hc101","apiLevel":2,...}
+
+$ tools/measure_latency.py e.txt --from-speed 3 --to-speed 15 --command M700_X15
+latency: 38.5 ms                # M700 default D2 P20, command injection to step-rate change
 ```
+
+Measured behaviour these tools were built to establish:
+
+| | |
+|---|---|
+| M700 jog latency | **38.5 ms** at the default `D2 P20`; latency tracks `D x P` above ~40ms of queued motion |
+| M604 follower skew | **0.0000 ms** across straight moves, helical arcs and jogging |
+| `M999` reboot | uptime 16s -> 6s, HTTP back within 5s |
+
+All of these are **emulator** numbers. They establish that the firmware logic does what it claims;
+they are not predictions about a real board, whose SPI, driver and bus timing this does not model.
 
 ## What does not work
 
@@ -43,6 +69,7 @@ $ curl -s http://localhost:8080/rr_connect?password=
 | **CAN expansion** | Only `MCAN CCCR` has storage. No expansion boards. |
 | **USB** | Only `USBHS_SR` is faked, enough to get past TinyUSB's init spin. No USB console. |
 | **Endstops, probes, real ADC dynamics** | Sensor channels hold fixed values; nothing changes with temperature or position. |
+| **XDMAC completion interrupt** | Deliberately not wired to the NVIC. `ID_XDMAC = 58` genuinely is unconnected, and connecting it *looks* like a fidelity fix, but it wedges the board — `M115` stops answering and AFEC starts collapse from 4255 to 86. Drivers that need it must poll, as the HSMCI one does. |
 | **Timing fidelity** | Step *timing* comes from the TC model. Nothing here proves a real TMC5160 would follow the pulses. |
 
 ## Tested on
@@ -154,11 +181,20 @@ and point it at `http://localhost:8080`. **AxisControl** uses the same address.
 
 ```
 platforms/    .repl platform description (+ fetched SVD, not committed)
-peripherals/  C# peripheral models: timer/counter, parallel IO, AFEC
+peripherals/  C# peripheral models, one file per SAME70 peripheral
 scripts/      .resc run scripts
 tools/        build, run, and analysis tooling
+docs/         integration notes for host software (AxisControl, DWC)
 files/        the embedded filesystem: config.g, macros, gcodes
 ```
+
+`tools/`: `build_firmware.sh` (compile + embed + CRC), `run_gcode.py` (drive the board over emulated
+USART2), `run_networked.sh` + `setup_guest.sh` + `guest_run.sh` (the Lima path), `make_sdcard.sh`,
+`analyse_edges.py` (step edges to a velocity profile), `measure_latency.py` (command to step-rate
+change), `fetch_svd.sh`.
+
+`docs/`: `M700-host-integration.md` for anything driving the jog API, `M604-axiscontrol-migration.md`
+for moving a G-code dust shoe onto the firmware follower.
 
 ## Peripheral models
 
@@ -169,6 +205,8 @@ files/        the embedded filesystem: config.g, macros, gcodes
 | `SAME70_AnalogFrontEnd.cs` | Sensors. RRF computes completed conversions as `CHSR & ISR & ~OVER`; with stubs that is always empty, so nothing ever converted. |
 | `SAME70_Hsmci.cs` | SD card controller. Renode's `SDCard` is the card; this is the SAME70 side. |
 | `SAME70_Xdmac.cs` | DMA. SD data moves by XDMAC, not through HSMCI's FIFO, so the card is unusable without it. |
+| `SAME70_ResetController.cs` | Reboot. `ResetProcessor()` requests a reset then spins in `for(;;){}`; with no RSTC the request vanished and the board wedged there with the network stack dead, looking exactly like a networking fault. |
+| `SAME70_UsartSpi.cs` | USART1 in SPI mode with the TMC5160 daisy chain behind it. The drivers are modelled inside it because the chain is electrically one shift register, not separately addressable devices. |
 
 Everything else is left to the SVD fallback, which returns reset values and logs the access — and that
 log is the to-do list for what to model next.
